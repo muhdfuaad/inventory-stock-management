@@ -12,5 +12,7 @@ public class Stock : BaseEntity
 
     public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 
+    public byte[] RowVersion { get; set; } = [];
+
     public ProductVariantCombination Combination { get; set; } = null!;
 }
