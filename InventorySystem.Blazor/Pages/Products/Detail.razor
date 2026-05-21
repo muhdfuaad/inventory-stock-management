@@ -1,0 +1,345 @@
+@page "/products/{Id:int}"
+@inject ApiService Api
+@inject NavigationManager Navigation
+
+<PageTitle>Product Details</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h4>@product?.Name</h4>
+        <p>@(product?.Description ?? "No description")</p>
+    </div>
+    <a href="/products" class="btn-ghost">
+        <i class="bi bi-arrow-left"></i> Back to Products
+    </a>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(successMessage))
+{
+    <div class="alert-clean success">
+        <i class="bi bi-check-circle"></i> @successMessage
+    </div>
+}
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert-clean error">
+        <i class="bi bi-exclamation-circle"></i> @errorMessage
+    </div>
+}
+
+@if (isLoading)
+{
+    <div class="spinner-wrap"><div class="spinner"></div><span>Loading...</span></div>
+}
+else if (product != null)
+{
+    <!-- Variants section -->
+    <div class="card mb-4">
+        <div class="card-header-clean">
+            <h6><i class="bi bi-tags me-2"></i>Variants</h6>
+        </div>
+        <div class="p-4">
+            @if (!product.Variants.Any())
+            {
+                <div class="empty-state" style="padding:20px">
+                    <i class="bi bi-tag" style="font-size:1.5rem"></i>
+                    <p>No variants yet. Add one below.</p>
+                </div>
+            }
+            else
+            {
+                <div class="d-flex flex-wrap gap-3 mb-4">
+                    @foreach (var v in product.Variants)
+                    {
+                        <div class="card p-3" style="min-width:160px;border-radius:10px;position:relative;">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div style="font-weight:600;font-size:0.85rem;color:var(--text-primary);">
+                                    <i class="bi bi-tag-fill me-1" style="color:var(--primary);"></i>@v.Name
+                                </div>
+                                <button class="btn-icon danger" style="width:24px;height:24px;font-size:0.75rem;" @onclick="() => DeleteVariantAsync(v.Id)" disabled="@isBusy" title="Delete Variant">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                            <div class="d-flex flex-wrap gap-1">
+                                @foreach (var val in v.Values)
+                                {
+                                    <span class="badge-pill badge-indigo">@val</span>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            <!-- Add variant form -->
+            <div style="border-top:1px solid var(--border);padding-top:20px;">
+                <div style="font-weight:600;font-size:0.85rem;margin-bottom:12px;color:var(--text-secondary);">
+                    <i class="bi bi-plus-circle me-1"></i> Add New Variant
+                </div>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label-clean">Variant Name</label>
+                        <input class="form-control-clean" @bind="newVariant.Name" placeholder="e.g. Size" />
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label-clean">Values (comma separated)</label>
+                        <input class="form-control-clean" @bind="variantValuesText" placeholder="e.g. S, M, L, XL" />
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn-primary-custom w-100" @onclick="AddVariantAsync" disabled="@isBusy">
+                            @if (isBusy)
+                            {
+                                <div class="spinner" style="width:14px;height:14px;border-width:2px;"></div>
+                            }
+                            else
+                            {
+                                <i class="bi bi-plus-lg"></i>
+                            }
+                            Add
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stock section -->
+    <div class="card">
+        <div class="card-header-clean">
+            <h6><i class="bi bi-archive me-2"></i>Stock by Combination</h6>
+            <span style="font-size:0.78rem;color:var(--text-muted);">
+                @product.Combinations.Count combinations
+            </span>
+        </div>
+
+        @if (!product.Combinations.Any())
+        {
+            <div class="empty-state">
+                <i class="bi bi-inbox"></i>
+                <p>No combinations yet. Add variants first.</p>
+            </div>
+        }
+        else
+        {
+            <table class="table-clean">
+                <thead>
+                    <tr>
+                        <th>Combination</th>
+                        <th>Key</th>
+                        <th>Stock</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var combo in product.Combinations)
+                    {
+                        <tr>
+                            <td><span style="font-weight:500;">@combo.DisplayLabel</span></td>
+                            <td>
+                                <code style="font-size:0.75rem;background:var(--surface);padding:2px 8px;border-radius:5px;color:var(--primary);">
+                                    @combo.CombinationKey
+                                </code>
+                            </td>
+                            <td>
+                                @{
+                                    var qty = combo.CurrentStock;
+                                    var qtyClass = qty > 20 ? "qty-high" : qty > 5 ? "qty-medium" : "qty-low";
+                                }
+                                <span class="qty-display @qtyClass">@qty</span>
+                                <span style="font-size:0.75rem;color:var(--text-muted);margin-left:4px;">units</span>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center gap-2">
+                                    <input type="number" class="form-control-clean" style="width:80px;padding:5px 9px;"
+                                        @bind="stockQuantities[combo.Id]" min="1" placeholder="Qty" />
+                                    <button class="btn-icon success" @onclick="() => AddStockAsync(combo.Id)" disabled="@isBusy" title="Add">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                    <button class="btn-icon danger" @onclick="() => RemoveStockAsync(combo.Id)" disabled="@isBusy" title="Remove">
+                                        <i class="bi bi-dash-lg"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+}
+
+@code {
+    [Parameter]
+    public int Id { get; set; }
+
+    private ProductResponseDto? product;
+    private List<StockResponseDto> stockRows = [];
+    private readonly AddVariantDto newVariant = new();
+    private readonly Dictionary<int, int> stockQuantities = [];
+    private string variantValuesText = string.Empty;
+    private string successMessage = string.Empty;
+    private string errorMessage = string.Empty;
+    private bool isLoading = true;
+    private bool isBusy;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            product = await Api.GetProductAsync(Id);
+            stockRows = await Api.GetProductStockAsync(Id);
+
+            foreach (var stock in stockRows)
+            {
+                stockQuantities.TryAdd(stock.CombinationId, 1);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load product details. {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task AddVariantAsync()
+    {
+        isBusy = true;
+        successMessage = string.Empty;
+        errorMessage = string.Empty;
+
+        try
+        {
+            newVariant.Values = variantValuesText
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var success = await Api.AddVariantAsync(Id, newVariant);
+
+            if (!success)
+            {
+                errorMessage = string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to add variant." : Api.LastErrorMessage;
+                return;
+            }
+
+            successMessage = "Variant added successfully.";
+            newVariant.Name = string.Empty;
+            newVariant.Values = [];
+            variantValuesText = string.Empty;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to add variant. {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task DeleteVariantAsync(int variantId)
+    {
+        isBusy = true;
+        successMessage = string.Empty;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var success = await Api.DeleteVariantAsync(variantId);
+
+            if (!success)
+            {
+                errorMessage = string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to delete variant." : Api.LastErrorMessage;
+                return;
+            }
+
+            successMessage = "Variant deleted successfully.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to delete variant. {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task AddStockAsync(int combinationId)
+    {
+        isBusy = true;
+        successMessage = string.Empty;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var quantity = Math.Max(stockQuantities[combinationId], 1);
+            var success = await Api.AddStockAsync(new AddStockDto { CombinationId = combinationId, Quantity = quantity });
+
+            if (!success)
+            {
+                errorMessage = string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to add stock." : Api.LastErrorMessage;
+                return;
+            }
+
+            successMessage = "Stock added successfully.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to add stock. {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task RemoveStockAsync(int combinationId)
+    {
+        isBusy = true;
+        successMessage = string.Empty;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var quantity = Math.Max(stockQuantities[combinationId], 1);
+            var result = await Api.RemoveStockAsync(new RemoveStockDto { CombinationId = combinationId, Quantity = quantity });
+
+            if (!result.success)
+            {
+                errorMessage = result.errorMessage;
+                return;
+            }
+
+            successMessage = "Stock removed successfully.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to remove stock. {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/products");
+    }
+}

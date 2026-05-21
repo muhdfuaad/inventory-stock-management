@@ -1,0 +1,103 @@
+@page "/products/create"
+@inject ApiService Api
+@inject NavigationManager Navigation
+
+<PageTitle>Create Product</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h4>Add Product</h4>
+        <p>Create a new product in your catalog</p>
+    </div>
+    <a href="/products" class="btn-ghost">
+        <i class="bi bi-arrow-left"></i> Back
+    </a>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(successMessage))
+{
+    <div class="alert-clean success">
+        <i class="bi bi-check-circle"></i> @successMessage
+    </div>
+}
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert-clean error">
+        <i class="bi bi-exclamation-circle"></i> @errorMessage
+    </div>
+}
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card p-4">
+            <div class="mb-3">
+                <label class="form-label-clean">Product Name <span style="color:var(--danger)">*</span></label>
+                <input class="form-control-clean" @bind="model.Name" placeholder="e.g. Shirt, Shoes, Mobile" />
+            </div>
+            <div class="mb-4">
+                <label class="form-label-clean">Description</label>
+                <textarea class="form-control-clean" @bind="model.Description" rows="3"
+                    placeholder="Optional product description"></textarea>
+            </div>
+            <div class="d-flex gap-2">
+                <button class="btn-primary-custom" @onclick="CreateProductAsync" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <div class="spinner" style="width:14px;height:14px;border-width:2px;"></div>
+                        <span>Creating...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-plus-lg"></i>
+                        <span>Create Product</span>
+                    }
+                </button>
+                <a href="/products" class="btn-ghost">Cancel</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly CreateProductDto model = new();
+    private bool isSaving;
+    private string successMessage = string.Empty;
+    private string errorMessage = string.Empty;
+
+    private async Task CreateProductAsync()
+    {
+        isSaving = true;
+        successMessage = string.Empty;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var success = await Api.CreateProductAsync(model);
+
+            if (!success)
+            {
+                errorMessage = string.IsNullOrWhiteSpace(Api.LastErrorMessage)
+                    ? "Unable to create product."
+                    : Api.LastErrorMessage;
+                return;
+            }
+
+            successMessage = "Product created successfully.";
+            await Task.Delay(1000);
+            Navigation.NavigateTo("/products");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to create product. {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/products");
+    }
+}

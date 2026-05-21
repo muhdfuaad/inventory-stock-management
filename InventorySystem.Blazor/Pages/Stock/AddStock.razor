@@ -1,0 +1,184 @@
+@page "/stock/add"
+@inject ApiService Api
+
+<PageTitle>Add Stock</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h4>Add Stock</h4>
+        <p>Increase inventory for a product combination</p>
+    </div>
+</div>
+
+@if (!string.IsNullOrWhiteSpace(successMessage))
+{
+    <div class="alert-clean success"><i class="bi bi-check-circle"></i> @successMessage</div>
+}
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert-clean error"><i class="bi bi-exclamation-circle"></i> @errorMessage</div>
+}
+
+<div class="row">
+    <div class="col-md-5">
+        <div class="card p-4">
+            <div class="mb-3">
+                <label class="form-label-clean">Select Product</label>
+                <select class="form-control-clean" value="@selectedProductId" @onchange="OnProductChangedAsync">
+                    <option value="">— Choose product —</option>
+                    @foreach (var p in products)
+                    {
+                        <option value="@p.Id">@p.Name</option>
+                    }
+                </select>
+            </div>
+
+            @if (isStockLoading)
+            {
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                    <span class="text-muted">Loading combinations...</span>
+                </div>
+            }
+            else if (selectedProductId > 0 && stockRows.Count == 0)
+            {
+                <div class="alert-clean error"><i class="bi bi-info-circle"></i> No combinations available for this product.</div>
+            }
+
+            @if (stockRows.Any())
+            {
+                <div class="mb-3">
+                    <label class="form-label-clean">Select Combination</label>
+                    <select class="form-control-clean" @bind="model.CombinationId">
+                        <option value="0">— Choose combination —</option>
+                        @foreach (var c in stockRows)
+                        {
+                            <option value="@c.CombinationId">@c.DisplayLabel (Stock: @c.Quantity)</option>
+                        }
+                    </select>
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label-clean">Quantity to Add</label>
+                    <input type="number" class="form-control-clean" @bind="model.Quantity" min="1" placeholder="Enter quantity" />
+                </div>
+
+                <button class="btn-primary-custom" @onclick="SubmitAsync" disabled="@isSaving">
+                    @if (isSaving)
+                    {
+                        <div class="spinner" style="width:14px;height:14px;border-width:2px;"></div>
+                        <span>Adding...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-plus-circle"></i>
+                        <span>Add Stock</span>
+                    }
+                </button>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly AddStockDto model = new();
+    private List<ProductResponseDto> products = [];
+    private List<StockResponseDto> stockRows = [];
+    private int selectedProductId;
+    private bool isLoading = true;
+    private bool isStockLoading;
+    private bool isSaving;
+    private string successMessage = string.Empty;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProductsAsync();
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            var result = await Api.GetProductsAsync(1, 100);
+            products = result.Items;
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load products. {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnProductChangedAsync(ChangeEventArgs args)
+    {
+        selectedProductId = int.TryParse(args.Value?.ToString(), out var value) ? value : 0;
+        model.CombinationId = 0;
+        stockRows = [];
+
+        if (selectedProductId > 0)
+        {
+            await LoadStockAsync();
+        }
+    }
+
+    private async Task LoadStockAsync()
+    {
+        isStockLoading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            stockRows = await Api.GetProductStockAsync(selectedProductId);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load combinations. {ex.Message}";
+        }
+        finally
+        {
+            isStockLoading = false;
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        isSaving = true;
+        successMessage = string.Empty;
+        errorMessage = string.Empty;
+
+        try
+        {
+            if (model.CombinationId <= 0)
+            {
+                errorMessage = "Select a combination.";
+                return;
+            }
+
+            var success = await Api.AddStockAsync(model);
+
+            if (!success)
+            {
+                errorMessage = string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to add stock." : Api.LastErrorMessage;
+                return;
+            }
+
+            successMessage = "Stock added successfully.";
+            await LoadStockAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to add stock. {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

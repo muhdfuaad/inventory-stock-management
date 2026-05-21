@@ -1,0 +1,206 @@
+@page "/products"
+@inject ApiService Api
+@inject NavigationManager Navigation
+
+<PageTitle>Products</PageTitle>
+
+<div class="page-header">
+    <div>
+        <h4>Products</h4>
+        <p>Manage your product catalog and variants</p>
+    </div>
+    <a href="/products/create" class="btn-primary-custom">
+        <i class="bi bi-plus-lg"></i> Add Product
+    </a>
+</div>
+
+@if (isLoading)
+{
+    <div class="spinner-wrap">
+        <div class="spinner"></div>
+        <span>Loading products...</span>
+    </div>
+}
+else if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <div class="alert-clean error">
+        <i class="bi bi-exclamation-circle"></i> @errorMessage
+    </div>
+}
+else
+{
+    <!-- Stat row -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-icon indigo"><i class="bi bi-box-seam"></i></div>
+                <div>
+                    <h6>Total Products</h6>
+                    <div class="stat-value">@products.TotalCount</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-icon green"><i class="bi bi-diagram-3"></i></div>
+                <div>
+                    <h6>Total Combinations</h6>
+                    <div class="stat-value">@(products.Items.Sum(p => p.Combinations.Count))</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="stat-card">
+                <div class="stat-icon amber"><i class="bi bi-layers"></i></div>
+                <div>
+                    <h6>This Page</h6>
+                    <div class="stat-value">@(products.Items.Count) / @pageSize</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table card -->
+    <div class="card">
+        <div class="card-header-clean">
+            <h6><i class="bi bi-table me-2"></i>Product List</h6>
+            <span style="font-size:0.78rem;color:var(--text-muted);">
+                Page @(page) of @products.TotalPages
+            </span>
+        </div>
+
+        @if (!products.Items.Any())
+        {
+            <div class="empty-state">
+                <i class="bi bi-inbox"></i>
+                <p>No products found.</p>
+            </div>
+        }
+        else
+        {
+            <table class="table-clean">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Product Name</th>
+                        <th>Description</th>
+                        <th>Variants</th>
+                        <th>Combinations</th>
+                        <th>Created</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var item in products.Items.Select((product, index) => new { product, index }))
+                    {
+                        <tr>
+                            <td style="color:var(--text-muted);font-size:0.8rem;">
+                                @(((page - 1) * pageSize) + item.index + 1)
+                            </td>
+                            <td>
+                                <span style="font-weight:600;">@item.product.Name</span>
+                            </td>
+                            <td style="color:var(--text-secondary);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                                @(item.product.Description ?? "—")
+                            </td>
+                            <td>
+                                <span class="badge-pill badge-indigo">
+                                    <i class="bi bi-tag"></i> @item.product.Variants.Count
+                                </span>
+                            </td>
+                            <td>
+                                <span class="badge-pill badge-green">
+                                    <i class="bi bi-grid"></i> @item.product.Combinations.Count
+                                </span>
+                            </td>
+                            <td style="color:var(--text-secondary);font-size:0.8rem;">
+                                @item.product.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")
+                            </td>
+                            <td>
+                                <a href="/products/@item.product.Id" class="btn-icon" title="View Details">
+                                    <i class="bi bi-eye"></i>
+                                </a>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+
+            <div class="pagination-wrap">
+                <span>Showing @products.Items.Count of @products.TotalCount products</span>
+                <div class="d-flex gap-2">
+                    <button class="btn-ghost" @onclick="PreviousPage" disabled="@(page <= 1)">
+                        <i class="bi bi-chevron-left"></i> Prev
+                    </button>
+                    <button class="btn-ghost" @onclick="NextPage" disabled="@(page >= products.TotalPages)">
+                        Next <i class="bi bi-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private readonly int pageSize = 10;
+    private PagedResult<ProductResponseDto> products = new();
+    private int page = 1;
+    private bool isLoading = true;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProductsAsync();
+    }
+
+    private async Task LoadProductsAsync()
+    {
+        isLoading = true;
+        errorMessage = string.Empty;
+
+        try
+        {
+            products = await Api.GetProductsAsync(page, pageSize);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to load products. {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task PreviousPage()
+    {
+        if (page <= 1)
+        {
+            return;
+        }
+
+        page--;
+        await LoadProductsAsync();
+    }
+
+    private async Task NextPage()
+    {
+        if (page >= products.TotalPages)
+        {
+            return;
+        }
+
+        page++;
+        await LoadProductsAsync();
+    }
+
+    private void GoToCreate()
+    {
+        Navigation.NavigateTo("/products/create");
+    }
+
+    private void GoToDetails(int id)
+    {
+        Navigation.NavigateTo($"/products/{id}");
+    }
+}

@@ -32,6 +32,12 @@ try
     builder.Host.UseSerilog();
     builder.WebHost.UseKestrel();
 
+    var urls = builder.Configuration["ASPNETCORE_URLS"] ?? Environment.GetEnvironmentVariable("ASPNETCORE_URLS");
+    if (!string.IsNullOrEmpty(urls))
+    {
+        builder.WebHost.UseUrls(urls);
+    }
+
     builder.Services.AddApiServices(builder.Configuration);
     builder.Services.AddSwaggerDocumentation();
     Log.Information("Services configured");
