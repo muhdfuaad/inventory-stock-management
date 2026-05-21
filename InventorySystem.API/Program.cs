@@ -1,25 +1,79 @@
-using InventorySystem.Application;
-using InventorySystem.Infrastructure;
+using InventorySystem.API.Extensions;
+using InventorySystem.API.Middleware;
 using InventorySystem.Infrastructure.Data;
 using InventorySystem.Infrastructure.Data.Seed;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Serilog;
 
-var builder = WebApplication.CreateBuilder(args);
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .WriteTo.Console(outputTemplate: "[{Timestamp:HH:mm:ss} {Level:u3}] {Message:lj}{NewLine}{Exception}")
+    .CreateLogger();
 
-builder.Services.AddApplication();
-builder.Services.AddInfrastructure(builder.Configuration);
-
-var app = builder.Build();
-
-using (var scope = app.Services.CreateScope())
+try
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    Log.Information("Starting Inventory System API");
 
-    await db.Database.MigrateAsync();
+    var builder = WebApplication.CreateEmptyBuilder(new WebApplicationOptions
+    {
+        Args = args,
+        ContentRootPath = Directory.GetCurrentDirectory(),
+        EnvironmentName = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT") ?? "Production"
+    });
+    Log.Information("Web application builder created");
 
-    await DataSeeder.SeedAsync(db);
+    builder.Configuration
+        .AddJsonFile("appsettings.json", optional: false, reloadOnChange: false)
+        .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: false)
+        .AddEnvironmentVariables()
+        .AddCommandLine(args);
+
+    builder.Host.UseSerilog();
+    builder.WebHost.UseKestrel();
+
+    builder.Services.AddApiServices(builder.Configuration);
+    builder.Services.AddSwaggerDocumentation();
+    Log.Information("Services configured");
+
+    var app = builder.Build();
+    Log.Information("Application host built");
+
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        Log.Information("Applying migrations...");
+        await db.Database.MigrateAsync();
+        Log.Information("Database migrated successfully");
+
+        await DataSeeder.SeedAsync(db);
+        Log.Information("Seed data applied");
+    }
+
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI();
+    }
+
+    app.UseSerilogRequestLogging();
+    app.UseMiddleware<ExceptionMiddleware>();
+    app.UseHttpsRedirection();
+    app.MapControllers();
+
+    await app.RunAsync();
 }
-
-app.UseHttpsRedirection();
-
-app.Run();
+catch (Exception ex) when (ex.GetType().Name == "HostAbortedException")
+{
+    throw;
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application startup failed");
+    throw;
+}
+finally
+{
+    await Log.CloseAndFlushAsync();
+}
