@@ -117,6 +117,68 @@ public class VariantService(
         await transaction.CommitAsync(cancellationToken);
     }
 
+    public async Task<VariantResponseDto> UpdateVariantAsync(
+        int variantId,
+        UpdateVariantDto dto,
+        CancellationToken cancellationToken = default)
+    {
+        var name = NormalizeVariantName(dto.Name);
+        var values = NormalizeValues(dto.Values);
+
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
+        var variant = await dbContext.ProductVariants
+            .FirstOrDefaultAsync(v => v.Id == variantId, cancellationToken);
+
+        if (variant is null)
+        {
+            throw new NotFoundException($"Variant with id {variantId} was not found.");
+        }
+
+        var product = await dbContext.Products
+            .FirstOrDefaultAsync(p => p.Id == variant.ProductId, cancellationToken);
+
+        if (product is null)
+        {
+            throw new NotFoundException($"Product with id {variant.ProductId} was not found.");
+        }
+
+        var duplicateNameExists = await dbContext.ProductVariants
+            .AnyAsync(
+                v => v.ProductId == variant.ProductId
+                    && v.Id != variantId
+                    && v.Name.ToLower() == name.ToLower(),
+                cancellationToken);
+
+        if (duplicateNameExists)
+        {
+            logger.LogWarning(
+                "Duplicate variant update attempt for product {ProductId} and variant name {VariantName}",
+                variant.ProductId,
+                name);
+
+            throw new ValidationException($"Variant '{name}' already exists for this product.");
+        }
+
+        variant.Name = name;
+        variant.Values = values;
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var allVariants = await dbContext.ProductVariants
+            .Where(v => v.ProductId == variant.ProductId)
+            .ToListAsync(cancellationToken);
+
+        await SynchronizeCombinationsAsync(product, allVariants, cancellationToken);
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        logger.LogInformation("Variant {VariantId} updated for product {ProductId}", variantId, variant.ProductId);
+
+        return MapVariant(variant);
+    }
+
     public async Task<IReadOnlyList<VariantResponseDto>> GetVariantsByProductAsync(
         int productId,
         CancellationToken cancellationToken = default)
@@ -221,6 +283,23 @@ public class VariantService(
         var keysToAdd = generatedKeys
             .Where(key => !existingKeys.Contains(key))
             .ToList();
+
+        logger.LogInformation(
+            "Recomputed combinations for product {ProductId}. Existing: {ExistingCount}, Generated: {GeneratedCount}, Adding: {AddCount}, Deleting obsolete: {DeleteCount}",
+            product.Id,
+            existingCombinations.Count,
+            generatedKeys.Count,
+            keysToAdd.Count,
+            combinationsToDelete.Count);
+
+        if (combinationsToDelete.Count > 0)
+        {
+            logger.LogInformation(
+                "Deleted {StockCount} stock rows and {CombinationCount} obsolete combinations for product {ProductId}",
+                stockToDelete.Count,
+                combinationsToDelete.Count,
+                product.Id);
+        }
 
         foreach (var key in keysToAdd)
         {

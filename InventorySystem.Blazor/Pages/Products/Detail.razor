@@ -33,6 +33,54 @@
 }
 else if (product != null)
 {
+    <div class="card mb-4">
+        <div class="card-header-clean">
+            <h6><i class="bi bi-pencil-square me-2"></i>Product Information</h6>
+            @if (!isEditingProduct)
+            {
+                <button class="btn-ghost" @onclick="StartProductEdit" disabled="@isBusy">
+                    <i class="bi bi-pencil"></i> Edit Product
+                </button>
+            }
+        </div>
+        <div class="p-4">
+            @if (isEditingProduct)
+            {
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label-clean">Product Name</label>
+                        <input class="form-control-clean" @bind="productEditModel.Name" />
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label-clean">Description</label>
+                        <input class="form-control-clean" @bind="productEditModel.Description" />
+                    </div>
+                    <div class="col-md-3">
+                        <div class="d-flex gap-2">
+                            <button class="btn-primary-custom" @onclick="SaveProductAsync" disabled="@isBusy">
+                                <i class="bi bi-check-lg"></i> Save
+                            </button>
+                            <button class="btn-ghost" @onclick="CancelProductEdit" disabled="@isBusy">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <span class="form-label-clean">Name</span>
+                        <div style="font-weight:600;">@product.Name</div>
+                    </div>
+                    <div class="col-md-8">
+                        <span class="form-label-clean">Description</span>
+                        <div>@(product.Description ?? "No description")</div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
     <!-- Variants section -->
     <div class="card mb-4">
         <div class="card-header-clean">
@@ -51,21 +99,46 @@ else if (product != null)
                 <div class="d-flex flex-wrap gap-3 mb-4">
                     @foreach (var v in product.Variants)
                     {
-                        <div class="card p-3" style="min-width:160px;border-radius:10px;position:relative;">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div style="font-weight:600;font-size:0.85rem;color:var(--text-primary);">
-                                    <i class="bi bi-tag-fill me-1" style="color:var(--primary);"></i>@v.Name
+                        <div class="card p-3 variant-card">
+                            @if (editingVariantId == v.Id)
+                            {
+                                <div class="mb-2">
+                                    <label class="form-label-clean">Variant Name</label>
+                                    <input class="form-control-clean" @bind="editVariantName" />
                                 </div>
-                                <button class="btn-icon danger" style="width:24px;height:24px;font-size:0.75rem;" @onclick="() => DeleteVariantAsync(v.Id)" disabled="@isBusy" title="Delete Variant">
-                                    <i class="bi bi-trash"></i>
-                                </button>
-                            </div>
-                            <div class="d-flex flex-wrap gap-1">
-                                @foreach (var val in v.Values)
-                                {
-                                    <span class="badge-pill badge-indigo">@val</span>
-                                }
-                            </div>
+                                <div class="mb-3">
+                                    <label class="form-label-clean">Values</label>
+                                    <input class="form-control-clean" @bind="editVariantValuesText" placeholder="8GB, 16GB" />
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <button class="btn-primary-custom" @onclick="SaveVariantAsync" disabled="@isBusy">
+                                        <i class="bi bi-check-lg"></i> Save
+                                    </button>
+                                    <button class="btn-ghost" @onclick="CancelVariantEdit" disabled="@isBusy">Cancel</button>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div style="font-weight:600;font-size:0.85rem;color:var(--text-primary);">
+                                        <i class="bi bi-tag-fill me-1" style="color:var(--primary);"></i>@v.Name
+                                    </div>
+                                    <div class="d-flex gap-1">
+                                        <button class="btn-icon" style="width:24px;height:24px;font-size:0.75rem;" @onclick="() => StartVariantEdit(v)" disabled="@isBusy" title="Edit Variant">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button class="btn-icon danger" style="width:24px;height:24px;font-size:0.75rem;" @onclick="() => DeleteVariantAsync(v.Id)" disabled="@isBusy" title="Delete Variant">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (var val in v.Values)
+                                    {
+                                        <span class="badge-pill badge-indigo">@val</span>
+                                    }
+                                </div>
+                            }
                         </div>
                     }
                 </div>
@@ -149,13 +222,13 @@ else if (product != null)
                     @foreach (var combo in product.Combinations)
                     {
                         <tr>
-                            <td><span style="font-weight:500;">@combo.DisplayLabel</span></td>
-                            <td>
+                            <td data-label="Combination"><span style="font-weight:500;">@combo.DisplayLabel</span></td>
+                            <td data-label="Key">
                                 <code style="font-size:0.75rem;background:var(--surface);padding:2px 8px;border-radius:5px;color:var(--primary);">
                                     @combo.CombinationKey
                                 </code>
                             </td>
-                            <td>
+                            <td data-label="Stock">
                                 @{
                                     var qty = combo.CurrentStock;
                                     var qtyClass = qty > 20 ? "qty-high" : qty > 5 ? "qty-medium" : "qty-low";
@@ -163,9 +236,9 @@ else if (product != null)
                                 <span class="qty-display @qtyClass">@qty</span>
                                 <span style="font-size:0.75rem;color:var(--text-muted);margin-left:4px;">units</span>
                             </td>
-                            <td>
+                            <td data-label="Actions">
                                 <div class="d-flex align-items-center gap-2">
-                                    <input type="number" class="form-control-clean" style="width:80px;padding:5px 9px;"
+                                    <input type="number" class="form-control-clean stock-qty-input"
                                         @bind="stockQuantities[combo.Id]" min="1" placeholder="Qty" />
                                     <button class="btn-icon success" @onclick="() => AddStockAsync(combo.Id)" disabled="@isBusy" title="Add">
                                         <i class="bi bi-plus-lg"></i>
@@ -190,12 +263,17 @@ else if (product != null)
     private ProductResponseDto? product;
     private List<StockResponseDto> stockRows = [];
     private readonly AddVariantDto newVariant = new();
+    private readonly UpdateProductDto productEditModel = new();
     private readonly Dictionary<int, int> stockQuantities = [];
     private string variantValuesText = string.Empty;
+    private int? editingVariantId;
+    private string editVariantName = string.Empty;
+    private string editVariantValuesText = string.Empty;
     private string successMessage = string.Empty;
     private string errorMessage = string.Empty;
     private bool isLoading = true;
     private bool isBusy;
+    private bool isEditingProduct;
 
     protected override async Task OnInitializedAsync()
     {
@@ -211,6 +289,8 @@ else if (product != null)
         {
             product = await Api.GetProductAsync(Id);
             stockRows = await Api.GetProductStockAsync(Id);
+            productEditModel.Name = product.Name;
+            productEditModel.Description = product.Description;
 
             foreach (var stock in stockRows)
             {
@@ -274,6 +354,133 @@ else if (product != null)
         catch (Exception ex)
         {
             ShowError($"Unable to add variant. {ex.Message}");
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void StartProductEdit()
+    {
+        if (product is null)
+        {
+            return;
+        }
+
+        ClearMessages();
+        productEditModel.Name = product.Name;
+        productEditModel.Description = product.Description;
+        isEditingProduct = true;
+    }
+
+    private void CancelProductEdit()
+    {
+        isEditingProduct = false;
+    }
+
+    private async Task SaveProductAsync()
+    {
+        isBusy = true;
+        ClearMessages();
+
+        try
+        {
+            productEditModel.Name = productEditModel.Name.Trim();
+
+            if (string.IsNullOrWhiteSpace(productEditModel.Name))
+            {
+                ShowError("Product name is required.");
+                return;
+            }
+
+            var success = await Api.UpdateProductAsync(Id, productEditModel);
+
+            if (!success)
+            {
+                ShowError(string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to update product." : Api.LastErrorMessage);
+                return;
+            }
+
+            ShowSuccess("Product updated successfully.");
+            isEditingProduct = false;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Unable to update product. {ex.Message}");
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private void StartVariantEdit(VariantResponseDto variant)
+    {
+        ClearMessages();
+        editingVariantId = variant.Id;
+        editVariantName = variant.Name;
+        editVariantValuesText = string.Join(", ", variant.Values);
+    }
+
+    private void CancelVariantEdit()
+    {
+        editingVariantId = null;
+        editVariantName = string.Empty;
+        editVariantValuesText = string.Empty;
+    }
+
+    private async Task SaveVariantAsync()
+    {
+        if (!editingVariantId.HasValue)
+        {
+            return;
+        }
+
+        isBusy = true;
+        ClearMessages();
+
+        try
+        {
+            var normalizedName = editVariantName.Trim();
+
+            if (string.IsNullOrWhiteSpace(normalizedName))
+            {
+                ShowError("Variant name is required.");
+                return;
+            }
+
+            var values = editVariantValuesText
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            if (values.Count == 0)
+            {
+                ShowError("Enter at least one variant value.");
+                return;
+            }
+
+            var success = await Api.UpdateVariantAsync(editingVariantId.Value, new UpdateVariantDto
+            {
+                Name = normalizedName,
+                Values = values
+            });
+
+            if (!success)
+            {
+                ShowError(string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to update variant." : Api.LastErrorMessage);
+                return;
+            }
+
+            ShowSuccess("Variant updated successfully.");
+            CancelVariantEdit();
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowError($"Unable to update variant. {ex.Message}");
         }
         finally
         {

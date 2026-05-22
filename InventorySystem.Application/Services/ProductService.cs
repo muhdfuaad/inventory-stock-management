@@ -106,6 +106,8 @@ public class ProductService(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
+        logger.LogInformation("Product {ProductId} updated", id);
+
         return await GetByIdAsync(id, cancellationToken);
     }
 

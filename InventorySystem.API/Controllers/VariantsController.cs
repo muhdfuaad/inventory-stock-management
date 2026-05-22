@@ -42,6 +42,21 @@ public class VariantsController(IVariantService variantService) : ControllerBase
         return Ok(ApiResponse<object>.Ok(null, "Variant deleted successfully"));
     }
 
+    [HttpPut("{variantId:int}")]
+    public async Task<ActionResult<ApiResponse<VariantResponseDto>>> UpdateVariant(
+        int variantId,
+        [FromBody] UpdateVariantDto dto,
+        CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ApiResponse<VariantResponseDto>.Fail("Validation failed", GetModelErrors()));
+        }
+
+        var result = await variantService.UpdateVariantAsync(variantId, dto, cancellationToken);
+        return Ok(ApiResponse<VariantResponseDto>.Ok(result, "Variant updated successfully"));
+    }
+
     private IReadOnlyList<string> GetModelErrors()
     {
         return ModelState.Values

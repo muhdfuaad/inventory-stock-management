@@ -67,6 +67,12 @@ public class ApiService(HttpClient httpClient)
         return await IsSuccessAsync(response);
     }
 
+    public async Task<bool> UpdateVariantAsync(int variantId, UpdateVariantDto dto)
+    {
+        var response = await httpClient.PutAsJsonAsync($"api/variants/{variantId}", dto);
+        return await IsSuccessAsync(response);
+    }
+
     public async Task<bool> DeleteVariantAsync(int variantId)
     {
         var response = await httpClient.DeleteAsync($"api/variants/{variantId}");

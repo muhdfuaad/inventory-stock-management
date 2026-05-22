@@ -57,6 +57,16 @@ public class AddVariantDto
     public List<string> Values { get; set; } = [];
 }
 
+public class UpdateVariantDto
+{
+    [Required]
+    public string Name { get; set; } = string.Empty;
+
+    [Required]
+    [MinLength(1)]
+    public List<string> Values { get; set; } = [];
+}
+
 public class VariantResponseDto
 {
     public int Id { get; set; }

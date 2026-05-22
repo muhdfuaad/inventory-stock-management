@@ -1,9 +1,63 @@
 @inherits LayoutComponentBase
 
-<NavMenu />
+<div class="layout @(sidebarOpen ? "sidebar-open" : "")">
 
-<div class="main-content">
-    @Body
+    <!-- Mobile top header bar (hidden on desktop) -->
+    <header class="mobile-header">
+        <button class="mobile-header__toggle" @onclick="ToggleSidebar" aria-label="Toggle menu">
+            <i class="bi bi-list"></i>
+        </button>
+        <div class="mobile-header__brand">
+            <i class="bi bi-box-seam"></i>
+            <span>InventoryOS</span>
+        </div>
+    </header>
+
+    <!-- Sidebar (visible on desktop, slides in on mobile) -->
+    <aside class="sidebar">
+        <div class="sidebar__brand">
+            <i class="bi bi-box-seam"></i>
+            <div>
+                <div class="sidebar__brand-name">InventoryOS</div>
+                <div class="sidebar__brand-sub">Stock Management</div>
+            </div>
+        </div>
+
+        <nav class="sidebar__nav">
+            <ul>
+                <li>
+                    <NavLink href="products" Match="NavLinkMatch.Prefix" @onclick="CloseSidebar">
+                        <i class="bi bi-grid-1x2"></i>
+                        <span>Products</span>
+                    </NavLink>
+                </li>
+                <li>
+                    <NavLink href="stock/add" Match="NavLinkMatch.Prefix" @onclick="CloseSidebar">
+                        <i class="bi bi-plus-circle"></i>
+                        <span>Add Stock</span>
+                    </NavLink>
+                </li>
+                <li>
+                    <NavLink href="stock/remove" Match="NavLinkMatch.Prefix" @onclick="CloseSidebar">
+                        <i class="bi bi-dash-circle"></i>
+                        <span>Remove Stock</span>
+                    </NavLink>
+                </li>
+            </ul>
+        </nav>
+
+        <div class="sidebar__footer">
+            <span>Vikncodes Machine Test</span>
+        </div>
+    </aside>
+
+    <!-- Overlay (mobile only, closes sidebar on click) -->
+    <div class="sidebar-overlay @(sidebarOpen ? "active" : "")" @onclick="CloseSidebar"></div>
+
+    <!-- Main content area -->
+    <main class="main-content">
+        @Body
+    </main>
 </div>
 
 <div id="blazor-error-ui">
@@ -12,3 +66,17 @@
     <a href="" class="reload btn btn-sm btn-outline-light ms-3">Reload</a>
     <a class="dismiss ms-2 text-white"><i class="bi bi-x-lg"></i></a>
 </div>
+
+@code {
+    private bool sidebarOpen = false;
+
+    private void ToggleSidebar()
+    {
+        sidebarOpen = !sidebarOpen;
+    }
+
+    private void CloseSidebar()
+    {
+        sidebarOpen = false;
+    }
+}
