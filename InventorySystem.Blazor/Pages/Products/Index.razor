@@ -29,6 +29,13 @@ else if (!string.IsNullOrWhiteSpace(errorMessage))
 }
 else
 {
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <div class="alert-clean success">
+            <i class="bi bi-check-circle"></i> @successMessage
+        </div>
+    }
+
     <!-- Stat row -->
     <div class="row g-3 mb-4">
         <div class="col-md-4">
@@ -117,9 +124,14 @@ else
                                 @item.product.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy")
                             </td>
                             <td>
-                                <a href="/products/@item.product.Id" class="btn-icon" title="View Details">
-                                    <i class="bi bi-eye"></i>
-                                </a>
+                                <div class="d-flex gap-2">
+                                    <a href="/products/@item.product.Id" class="btn-icon" title="View Details">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    <button class="btn-icon text-danger" title="Delete Product" @onclick="() => OpenDeleteDialog(item.product)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     }
@@ -139,6 +151,35 @@ else
             </div>
         }
     </div>
+
+    @if (productToDelete is not null)
+    {
+        <div class="modal fade show d-block" tabindex="-1" role="dialog">
+            <div class="modal-dialog modal-dialog-centered" role="document">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Delete product</h5>
+                        <button type="button" class="btn-close" aria-label="Close" @onclick="CloseDeleteDialog" disabled="@isDeleting"></button>
+                    </div>
+                    <div class="modal-body">
+                        <p class="mb-1">Are you sure you want to delete <strong>@productToDelete.Name</strong>?</p>
+                        <p class="text-muted mb-0">This will also delete its variants, combinations, and stock records.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="CloseDeleteDialog" disabled="@isDeleting">Cancel</button>
+                        <button type="button" class="btn btn-danger" @onclick="ConfirmDeleteAsync" disabled="@isDeleting">
+                            @if (isDeleting)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            }
+                            Confirm Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="modal-backdrop fade show"></div>
+    }
 }
 
 @code {
@@ -146,17 +187,24 @@ else
     private PagedResult<ProductResponseDto> products = new();
     private int page = 1;
     private bool isLoading = true;
+    private bool isDeleting;
     private string errorMessage = string.Empty;
+    private string successMessage = string.Empty;
+    private ProductResponseDto? productToDelete;
 
     protected override async Task OnInitializedAsync()
     {
         await LoadProductsAsync();
     }
 
-    private async Task LoadProductsAsync()
+    private async Task LoadProductsAsync(bool clearMessages = true)
     {
         isLoading = true;
-        errorMessage = string.Empty;
+        if (clearMessages)
+        {
+            errorMessage = string.Empty;
+            successMessage = string.Empty;
+        }
 
         try
         {
@@ -202,5 +250,60 @@ else
     private void GoToDetails(int id)
     {
         Navigation.NavigateTo($"/products/{id}");
+    }
+
+    private void OpenDeleteDialog(ProductResponseDto product)
+    {
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+        productToDelete = product;
+    }
+
+    private void CloseDeleteDialog()
+    {
+        if (isDeleting)
+        {
+            return;
+        }
+
+        productToDelete = null;
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (productToDelete is null)
+        {
+            return;
+        }
+
+        isDeleting = true;
+        errorMessage = string.Empty;
+        successMessage = string.Empty;
+
+        try
+        {
+            var deletedProductName = productToDelete.Name;
+            var success = await Api.DeleteProductAsync(productToDelete.Id);
+
+            if (!success)
+            {
+                errorMessage = string.IsNullOrWhiteSpace(Api.LastErrorMessage)
+                    ? "Unable to delete product."
+                    : Api.LastErrorMessage;
+                return;
+            }
+
+            productToDelete = null;
+            successMessage = $"{deletedProductName} deleted successfully.";
+            await LoadProductsAsync(clearMessages: false);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Unable to delete product. {ex.Message}";
+        }
+        finally
+        {
+            isDeleting = false;
+        }
     }
 }

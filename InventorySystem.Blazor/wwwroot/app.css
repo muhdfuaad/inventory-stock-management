@@ -23,6 +23,7 @@ body {
     background: var(--surface);
     color: var(--text-primary);
     margin: 0;
+    min-width: 0;
 }
 
 /* ── Sidebar ── */
@@ -88,6 +89,7 @@ body {
     margin-left: 240px;
     padding: 32px 36px;
     min-height: 100vh;
+    min-width: 0;
 }
 
 /* ── Page header ── */
@@ -156,6 +158,7 @@ body {
     border: 1px solid var(--border);
     border-radius: 12px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    max-width: 100%;
 }
 
 .card-header-clean {
@@ -392,3 +395,217 @@ body {
 .qty-high   { color: var(--success); }
 .qty-medium { color: var(--warning); }
 .qty-low    { color: var(--danger); }
+
+/* ── Responsive layout ── */
+img,
+svg,
+video,
+canvas {
+    max-width: 100%;
+}
+
+.card:has(.table-clean) {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table-clean {
+    min-width: 760px;
+}
+
+.table-clean code {
+    white-space: normal;
+    word-break: break-word;
+}
+
+@media (max-width: 991.98px) {
+    .sidebar {
+        position: sticky;
+        top: 0;
+        left: auto;
+        width: 100%;
+        min-height: auto;
+        z-index: 200;
+        display: block;
+    }
+
+    .sidebar-brand {
+        padding: 14px 18px 10px;
+    }
+
+    .sidebar-brand h5 {
+        font-size: 0.95rem;
+    }
+
+    .sidebar nav {
+        overflow-x: auto;
+        padding: 0 10px 12px;
+    }
+
+    .sidebar .nav,
+    .sidebar .nav.flex-column {
+        flex-direction: row !important;
+        flex-wrap: nowrap;
+        gap: 8px !important;
+        margin-top: 0 !important;
+        padding-bottom: 2px;
+    }
+
+    .sidebar .nav-item {
+        padding: 0;
+        flex: 0 0 auto;
+    }
+
+    .sidebar .nav-link {
+        white-space: nowrap;
+        padding: 9px 12px;
+    }
+
+    .sidebar > div:last-child {
+        display: none;
+    }
+
+    .main-content {
+        margin-left: 0;
+        padding: 24px;
+    }
+
+    .page-header {
+        align-items: flex-start;
+        gap: 14px;
+    }
+
+    .stat-card {
+        padding: 16px;
+    }
+}
+
+@media (max-width: 767.98px) {
+    .main-content {
+        padding: 18px 14px 28px;
+    }
+
+    .page-header {
+        flex-direction: column;
+        margin-bottom: 18px;
+    }
+
+    .page-header h4 {
+        font-size: 1.15rem;
+    }
+
+    .page-header p {
+        font-size: 0.8rem;
+    }
+
+    .page-header .btn-primary-custom,
+    .page-header .btn-ghost,
+    .page-header a {
+        width: 100%;
+        justify-content: center;
+    }
+
+    .card {
+        border-radius: 10px;
+    }
+
+    .card-header-clean {
+        padding: 14px 16px;
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 6px;
+    }
+
+    .card.p-4,
+    .p-4 {
+        padding: 16px !important;
+    }
+
+    .stat-card {
+        gap: 12px;
+    }
+
+    .stat-icon {
+        width: 42px;
+        height: 42px;
+        font-size: 1.2rem;
+    }
+
+    .stat-card .stat-value {
+        font-size: 1.35rem;
+    }
+
+    .btn-primary-custom,
+    .btn-danger-custom,
+    .btn-ghost {
+        min-height: 42px;
+        justify-content: center;
+    }
+
+    .form-control-clean {
+        min-height: 42px;
+    }
+
+    .pagination-wrap {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 12px;
+        padding: 14px;
+    }
+
+    .pagination-wrap .d-flex {
+        width: 100%;
+    }
+
+    .pagination-wrap button {
+        flex: 1;
+        justify-content: center;
+    }
+
+    .table-clean {
+        min-width: 680px;
+        font-size: 0.82rem;
+    }
+
+    .table-clean thead th,
+    .table-clean tbody td {
+        padding: 10px 12px;
+    }
+
+    .modal-dialog {
+        margin: 12px;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .main-content {
+        padding: 14px 10px 24px;
+    }
+
+    .sidebar-brand {
+        padding: 12px 14px 8px;
+    }
+
+    .sidebar .nav-link {
+        font-size: 0.8rem;
+        padding: 8px 10px;
+        gap: 6px;
+    }
+
+    .sidebar .nav-link i {
+        font-size: 0.95rem;
+    }
+
+    .alert-clean {
+        align-items: flex-start;
+        font-size: 0.82rem;
+    }
+
+    .empty-state {
+        padding: 36px 14px;
+    }
+
+    .badge-pill {
+        white-space: normal;
+    }
+}

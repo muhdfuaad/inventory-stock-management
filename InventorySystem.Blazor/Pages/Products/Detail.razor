@@ -79,7 +79,22 @@ else if (product != null)
                 <div class="row g-2 align-items-end">
                     <div class="col-md-3">
                         <label class="form-label-clean">Variant Name</label>
-                        <input class="form-control-clean" @bind="newVariant.Name" placeholder="e.g. Size" />
+                        <input class="form-control-clean"
+                               list="variant-name-options"
+                               @bind="newVariant.Name"
+                               placeholder="Type or select variant" />
+                        <datalist id="variant-name-options">
+                            @foreach (var variant in product.Variants.OrderBy(v => v.Name))
+                            {
+                                <option value="@variant.Name"></option>
+                            }
+                        </datalist>
+                        @if (IsExistingVariantName(newVariant.Name))
+                        {
+                            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:4px;">
+                                New values will be added to the existing variant.
+                            </div>
+                        }
                     </div>
                     <div class="col-md-5">
                         <label class="form-label-clean">Values (comma separated)</label>
@@ -215,25 +230,42 @@ else if (product != null)
     private async Task AddVariantAsync()
     {
         isBusy = true;
-        successMessage = string.Empty;
-        errorMessage = string.Empty;
+        ClearMessages();
 
         try
         {
+            var normalizedName = newVariant.Name.Trim();
+
+            if (string.IsNullOrWhiteSpace(normalizedName))
+            {
+                ShowError("Variant name is required.");
+                return;
+            }
+
             newVariant.Values = variantValuesText
                 .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
+            if (newVariant.Values.Count == 0)
+            {
+                ShowError("Enter at least one variant value.");
+                return;
+            }
+
+            newVariant.Name = normalizedName;
+
             var success = await Api.AddVariantAsync(Id, newVariant);
 
             if (!success)
             {
-                errorMessage = string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to add variant." : Api.LastErrorMessage;
+                ShowError(string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to add variant." : Api.LastErrorMessage);
                 return;
             }
 
-            successMessage = "Variant added successfully.";
+            ShowSuccess(IsExistingVariantName(normalizedName)
+                ? "Variant values added successfully."
+                : "Variant added successfully.");
             newVariant.Name = string.Empty;
             newVariant.Values = [];
             variantValuesText = string.Empty;
@@ -241,7 +273,7 @@ else if (product != null)
         }
         catch (Exception ex)
         {
-            errorMessage = $"Unable to add variant. {ex.Message}";
+            ShowError($"Unable to add variant. {ex.Message}");
         }
         finally
         {
@@ -252,8 +284,7 @@ else if (product != null)
     private async Task DeleteVariantAsync(int variantId)
     {
         isBusy = true;
-        successMessage = string.Empty;
-        errorMessage = string.Empty;
+        ClearMessages();
 
         try
         {
@@ -261,16 +292,16 @@ else if (product != null)
 
             if (!success)
             {
-                errorMessage = string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to delete variant." : Api.LastErrorMessage;
+                ShowError(string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to delete variant." : Api.LastErrorMessage);
                 return;
             }
 
-            successMessage = "Variant deleted successfully.";
+            ShowSuccess("Variant deleted successfully.");
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            errorMessage = $"Unable to delete variant. {ex.Message}";
+            ShowError($"Unable to delete variant. {ex.Message}");
         }
         finally
         {
@@ -281,8 +312,7 @@ else if (product != null)
     private async Task AddStockAsync(int combinationId)
     {
         isBusy = true;
-        successMessage = string.Empty;
-        errorMessage = string.Empty;
+        ClearMessages();
 
         try
         {
@@ -291,16 +321,16 @@ else if (product != null)
 
             if (!success)
             {
-                errorMessage = string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to add stock." : Api.LastErrorMessage;
+                ShowError(string.IsNullOrWhiteSpace(Api.LastErrorMessage) ? "Unable to add stock." : Api.LastErrorMessage);
                 return;
             }
 
-            successMessage = "Stock added successfully.";
+            ShowSuccess("Stock added successfully.");
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            errorMessage = $"Unable to add stock. {ex.Message}";
+            ShowError($"Unable to add stock. {ex.Message}");
         }
         finally
         {
@@ -311,8 +341,7 @@ else if (product != null)
     private async Task RemoveStockAsync(int combinationId)
     {
         isBusy = true;
-        successMessage = string.Empty;
-        errorMessage = string.Empty;
+        ClearMessages();
 
         try
         {
@@ -321,16 +350,16 @@ else if (product != null)
 
             if (!result.success)
             {
-                errorMessage = result.errorMessage;
+                ShowError(result.errorMessage);
                 return;
             }
 
-            successMessage = "Stock removed successfully.";
+            ShowSuccess("Stock removed successfully.");
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            errorMessage = $"Unable to remove stock. {ex.Message}";
+            ShowError($"Unable to remove stock. {ex.Message}");
         }
         finally
         {
@@ -341,5 +370,62 @@ else if (product != null)
     private void GoBack()
     {
         Navigation.NavigateTo("/products");
+    }
+
+    private bool IsExistingVariantName(string? variantName)
+    {
+        if (product is null || string.IsNullOrWhiteSpace(variantName))
+        {
+            return false;
+        }
+
+        return product.Variants.Any(variant =>
+            string.Equals(variant.Name, variantName.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private CancellationTokenSource? toastCancellationTokenSource;
+
+    private void ShowSuccess(string message)
+    {
+        successMessage = message;
+        errorMessage = string.Empty;
+        ScheduleToastClear();
+    }
+
+    private void ShowError(string message)
+    {
+        errorMessage = message;
+        successMessage = string.Empty;
+        ScheduleToastClear();
+    }
+
+    private void ClearMessages()
+    {
+        toastCancellationTokenSource?.Cancel();
+        successMessage = string.Empty;
+        errorMessage = string.Empty;
+    }
+
+    private void ScheduleToastClear()
+    {
+        toastCancellationTokenSource?.Cancel();
+        toastCancellationTokenSource = new CancellationTokenSource();
+        var token = toastCancellationTokenSource.Token;
+
+        _ = ClearToastAfterDelayAsync(token);
+    }
+
+    private async Task ClearToastAfterDelayAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+            successMessage = string.Empty;
+            errorMessage = string.Empty;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (OperationCanceledException)
+        {
+        }
     }
 }

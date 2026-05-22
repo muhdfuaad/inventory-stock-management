@@ -111,7 +111,12 @@ public class ProductService(
 
     public async Task DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+
         var product = await dbContext.Products
+            .Include(p => p.Variants)
+            .Include(p => p.Combinations)
+                .ThenInclude(c => c.Stock)
             .FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
         if (product is null)
@@ -119,8 +124,20 @@ public class ProductService(
             throw new NotFoundException($"Product with id {id} was not found.");
         }
 
+        var stocks = product.Combinations
+            .Where(c => c.Stock is not null)
+            .Select(c => c.Stock)
+            .ToList();
+
+        dbContext.Stocks.RemoveRange(stocks);
+        dbContext.ProductVariantCombinations.RemoveRange(product.Combinations);
+        dbContext.ProductVariants.RemoveRange(product.Variants);
+
         product.IsDeleted = true;
         await dbContext.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        logger.LogInformation("Product {ProductId} deleted with related variants, combinations, and stock", id);
     }
 
     private async Task<bool> ProductNameExistsAsync(

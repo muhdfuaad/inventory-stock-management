@@ -33,55 +33,51 @@ public class VariantService(
             throw new NotFoundException($"Product with id {productId} was not found.");
         }
 
-        if (product.Variants.Any(v => string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase)))
+        var variant = product.Variants
+            .FirstOrDefault(v => string.Equals(v.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        if (variant is null)
         {
-            logger.LogWarning("Duplicate variant {VariantName} attempted for product {ProductId}", name, productId);
-            throw new ValidationException($"Variant '{name}' already exists for this product.");
+            variant = new ProductVariant
+            {
+                ProductId = productId,
+                Name = name,
+                Values = values
+            };
+
+            await dbContext.ProductVariants.AddAsync(variant, cancellationToken);
+        }
+        else
+        {
+            var existingValues = variant.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var newValues = values
+                .Where(value => !existingValues.Contains(value))
+                .ToList();
+
+            if (newValues.Count == 0)
+            {
+                logger.LogWarning("No new values supplied for variant {VariantName} on product {ProductId}", name, productId);
+                throw new ValidationException($"Variant '{name}' already contains the supplied values.");
+            }
+
+            variant.Values = variant.Values
+                .Concat(newValues)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
-        var variant = new ProductVariant
-        {
-            ProductId = productId,
-            Name = name,
-            Values = values
-        };
-
-        await dbContext.ProductVariants.AddAsync(variant, cancellationToken);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         var allVariants = await dbContext.ProductVariants
             .Where(v => v.ProductId == productId)
             .ToListAsync(cancellationToken);
 
-        var existingCombinations = await dbContext.ProductVariantCombinations
-            .Where(c => c.ProductId == productId)
-            .ToListAsync(cancellationToken);
-
-        var existingKeys = existingCombinations
-            .Select(c => c.CombinationKey)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var defaultPrice = existingCombinations.FirstOrDefault()?.Price ?? 0m;
-        var generatedCombinations = CombinationGenerator.Generate(allVariants);
-
-        foreach (var generatedCombination in generatedCombinations.Where(c => !existingKeys.Contains(c.CombinationKey)))
-        {
-            await dbContext.ProductVariantCombinations.AddAsync(new ProductVariantCombination
-            {
-                ProductId = productId,
-                CombinationKey = generatedCombination.CombinationKey,
-                DisplayLabel = generatedCombination.DisplayLabel,
-                RawCombination = generatedCombination.RawCombination,
-                Price = defaultPrice,
-                SKU = BuildSku(product.Name, generatedCombination.CombinationKey),
-                Stock = new Stock { Quantity = 0 }
-            }, cancellationToken);
-        }
+        await SynchronizeCombinationsAsync(product, allVariants, cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        logger.LogInformation("Variant {VariantName} added to product {ProductId}", name, productId);
+        logger.LogInformation("Variant {VariantName} updated for product {ProductId}", name, productId);
 
         return MapVariant(variant);
     }
@@ -108,55 +104,14 @@ public class VariantService(
             throw new NotFoundException($"Product with id {productId} was not found.");
         }
 
-        var remainingVariants = await dbContext.ProductVariants
-            .Where(v => v.ProductId == productId && v.Id != variantId)
-            .ToListAsync(cancellationToken);
-
-        var validCombinations = CombinationGenerator.Generate(remainingVariants);
-        var validKeys = validCombinations
-            .Select(c => c.CombinationKey)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var existingCombinations = await dbContext.ProductVariantCombinations
-            .Include(c => c.Stock)
-            .Where(c => c.ProductId == productId)
-            .ToListAsync(cancellationToken);
-
-        var existingKeys = existingCombinations
-            .Select(c => c.CombinationKey)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var orphanedCombinations = remainingVariants.Count == 0
-            ? existingCombinations
-            : existingCombinations
-                .Where(c => !validKeys.Contains(c.CombinationKey))
-                .ToList();
-
-        var defaultPrice = existingCombinations.FirstOrDefault()?.Price ?? 0m;
-
-        var orphanedStock = orphanedCombinations
-            .Where(c => c.Stock is not null)
-            .Select(c => c.Stock)
-            .ToList();
-
-        dbContext.Stocks.RemoveRange(orphanedStock);
-        dbContext.ProductVariantCombinations.RemoveRange(orphanedCombinations);
-
-        foreach (var generatedCombination in validCombinations.Where(c => !existingKeys.Contains(c.CombinationKey)))
-        {
-            await dbContext.ProductVariantCombinations.AddAsync(new ProductVariantCombination
-            {
-                ProductId = productId,
-                CombinationKey = generatedCombination.CombinationKey,
-                DisplayLabel = generatedCombination.DisplayLabel,
-                RawCombination = generatedCombination.RawCombination,
-                Price = defaultPrice,
-                SKU = BuildSku(product.Name, generatedCombination.CombinationKey),
-                Stock = new Stock { Quantity = 0 }
-            }, cancellationToken);
-        }
-
         dbContext.ProductVariants.Remove(variant);
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var remainingVariants = await dbContext.ProductVariants
+            .Where(v => v.ProductId == productId)
+            .ToListAsync(cancellationToken);
+
+        await SynchronizeCombinationsAsync(product, remainingVariants, cancellationToken);
 
         await dbContext.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -224,6 +179,64 @@ public class VariantService(
             Name = variant.Name,
             Values = variant.Values
         };
+    }
+
+    private async Task SynchronizeCombinationsAsync(
+        Product product,
+        IReadOnlyCollection<ProductVariant> currentVariants,
+        CancellationToken cancellationToken)
+    {
+        var generatedCombinations = CombinationGenerator.Generate(currentVariants);
+        var generatedByKey = generatedCombinations.ToDictionary(
+            combination => combination.CombinationKey,
+            StringComparer.OrdinalIgnoreCase);
+        var generatedKeys = generatedByKey.Keys.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var existingCombinations = await dbContext.ProductVariantCombinations
+            .Include(c => c.Stock)
+            .Where(c => c.ProductId == product.Id)
+            .ToListAsync(cancellationToken);
+
+        var existingKeys = existingCombinations
+            .Select(c => c.CombinationKey)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var combinationsToDelete = existingCombinations
+            .Where(c => !generatedKeys.Contains(c.CombinationKey))
+            .ToList();
+
+        var stockToDelete = combinationsToDelete
+            .Where(c => c.Stock is not null)
+            .Select(c => c.Stock)
+            .ToList();
+
+        dbContext.Stocks.RemoveRange(stockToDelete);
+        dbContext.ProductVariantCombinations.RemoveRange(combinationsToDelete);
+
+        var defaultPrice = existingCombinations
+            .FirstOrDefault(c => generatedKeys.Contains(c.CombinationKey))?.Price
+            ?? existingCombinations.FirstOrDefault()?.Price
+            ?? 0m;
+
+        var keysToAdd = generatedKeys
+            .Where(key => !existingKeys.Contains(key))
+            .ToList();
+
+        foreach (var key in keysToAdd)
+        {
+            var generatedCombination = generatedByKey[key];
+
+            await dbContext.ProductVariantCombinations.AddAsync(new ProductVariantCombination
+            {
+                ProductId = product.Id,
+                CombinationKey = generatedCombination.CombinationKey,
+                DisplayLabel = generatedCombination.DisplayLabel,
+                RawCombination = generatedCombination.RawCombination,
+                Price = defaultPrice,
+                SKU = BuildSku(product.Name, generatedCombination.CombinationKey),
+                Stock = new Stock { Quantity = 0 }
+            }, cancellationToken);
+        }
     }
 
     private static string BuildSku(string productName, string combinationKey)

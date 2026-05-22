@@ -22,16 +22,26 @@
 <div class="row">
     <div class="col-md-5">
         <div class="card p-4">
-            <div class="mb-3">
-                <label class="form-label-clean">Select Product</label>
-                <select class="form-control-clean" value="@selectedProductId" @onchange="OnProductChangedAsync">
-                    <option value="">— Choose product —</option>
-                    @foreach (var p in products)
-                    {
-                        <option value="@p.Id">@p.Name</option>
-                    }
-                </select>
-            </div>
+            @if (isLoading)
+            {
+                <div class="d-flex align-items-center gap-2">
+                    <div class="spinner"></div>
+                    <span class="text-muted">Loading products...</span>
+                </div>
+            }
+            else
+            {
+                <div class="mb-3">
+                    <label class="form-label-clean">Select Product</label>
+                    <select class="form-control-clean" value="@selectedProductId" @onchange="OnProductChangedAsync">
+                        <option value="">— Choose product —</option>
+                        @foreach (var p in products)
+                        {
+                            <option value="@p.Id">@p.Name</option>
+                        }
+                    </select>
+                </div>
+            }
 
             @if (isStockLoading)
             {
