@@ -157,6 +157,4 @@ InventorySystem.Blazor/
     └── app.css                    # Complete design system & responsive styles
 ```
 
-## 📄 License
 
-This project is part of a machine test for **Vikncodes**.
